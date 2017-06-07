@@ -7,7 +7,7 @@ public interface Marshaller {
 
 	String getFormat();
 
-	void serialize(Value value, OutputStream stream);
+	void serialize(Object value, OutputStream stream);
 
-	Value deserialize(Class<?> clazz, InputStream stream);
+	<T> T deserialize(Class<T> clazz, InputStream stream);
 }
