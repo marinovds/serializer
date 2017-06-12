@@ -1,6 +1,6 @@
 package com.github.marinovds;
 
-public class FormatNames {
+public final class FormatNames {
 
 	private FormatNames( ) {
 		throw new UnsupportedOperationException("Utility classes cannot be initialized");

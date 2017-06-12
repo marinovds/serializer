@@ -5,36 +5,27 @@ import java.io.OutputStream;
 import java.util.HashMap;
 import java.util.Map;
 
-public class MarshallerFactory {
+public final class MarshallerContext {
 
-	private static final String FORBIDDEN_PREFIX = "ser_";
-	private static Map<String, Marshaller> holder;
+	private static final Map<String, Marshaller> defaultMarshallers;
+	private Map<String, Marshaller> holder;
 
 	static {
-		holder = new HashMap<>();
+		defaultMarshallers = new HashMap<>();
 		// TODO add default implementations
 	}
 
-	private MarshallerFactory( ) {
-		throw new UnsupportedOperationException("Utility classes cannot be instantiated");
+	MarshallerContext() {
+		this.holder = new HashMap<>();
 	}
 
-	public static Marshaller getMapper(String format) {
-		validateFormat(format);
+	public Marshaller getMarshaller(String format) {
+		Utility.validateInput(format, "Format cannot be null");
 		return getMapperByFormat(format);
 	}
 
-	private static void validateFormat(String format) {
-		if (format == null) {
-			throw new IllegalArgumentException("Format cannot be null");
-		}
-		if (format.startsWith(FORBIDDEN_PREFIX)) {
-			throw new IllegalArgumentException("'" + FORBIDDEN_PREFIX + "' prefix is forbidden.");
-		}
-	}
-
-	private static Marshaller getMapperByFormat(String format) {
-		Marshaller retval = holder.get(format);
+	private Marshaller getMapperByFormat(String format) {
+		Marshaller retval = this.holder.get(format);
 		if (retval == null) {
 			return getDefault(format);
 		}
@@ -42,30 +33,22 @@ public class MarshallerFactory {
 	}
 
 	private static Marshaller getDefault(String format) {
-		return holder.get(toDefaultFormatName(format));
+		Marshaller retval = defaultMarshallers.get(format);
+		if (retval == null) {
+			throw new IllegalArgumentException("Unknown format was passed");
+		}
+		return retval;
 	}
 
-	public static boolean addFormat(String formatName, Serializer serializer) {
-		validateFormat(formatName);
-		return holder.put(formatName, new MarshallerImpl(formatName, serializer)) == null;
+	public boolean addFormat(String formatName, Serializer serializer) {
+		Utility.validateInput(formatName, "Format cannot be null");
+		return this.holder.put(formatName, new MarshallerImpl(formatName, serializer)) == null;
 	}
 
-	public static boolean removeFormat(String formatName) {
+	public boolean removeFormat(String formatName) {
 		// TODO why would you like to do that?!
-		validateFormat(formatName);
-		return holder.remove(formatName) != null;
-	}
-
-	// TODO optimize. If more formats are added this method will expand
-	// drastically
-	private static String toDefaultFormatName(String format) {
-		if (FormatNames.XML.equals(format)) {
-			return FORBIDDEN_PREFIX + FormatNames.XML;
-		}
-		if (FormatNames.JSON.equals(format)) {
-			return FORBIDDEN_PREFIX + FormatNames.JSON;
-		}
-		throw new IllegalArgumentException("Unknown format: " + format);
+		Utility.validateInput(formatName, "Format cannot be null");
+		return this.holder.remove(formatName) != null;
 	}
 
 	private static class MarshallerImpl implements Marshaller {

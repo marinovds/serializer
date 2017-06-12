@@ -3,12 +3,12 @@ package com.github.marinovds;
 import java.util.List;
 import java.util.Map;
 
-public class Value {
+public final class Value {
 
 	private final Object value;
-	private final ValueType type;
+	private final Type type;
 
-	private Value(Object value, ValueType type) {
+	private Value(Object value, Type type) {
 		this.value = value;
 		this.type = type;
 	}
@@ -17,23 +17,23 @@ public class Value {
 		return this.value;
 	}
 
-	public ValueType getType() {
+	public Type getType() {
 		return this.type;
 	}
 
 	public static Value createScalar(String value) {
-		return new Value(value, ValueType.SCALAR);
+		return new Value(value, Type.SCALAR);
 	}
 
 	public static Value createList(List<Value> value) {
-		return new Value(value, ValueType.LIST);
+		return new Value(value, Type.LIST);
 	}
 
 	public static Value createMap(Map<String, Value> value) {
-		return new Value(value, ValueType.MAP);
+		return new Value(value, Type.MAP);
 	}
 
-	public enum ValueType {
+	public enum Type {
 
 		SCALAR, LIST, MAP;
 	}
