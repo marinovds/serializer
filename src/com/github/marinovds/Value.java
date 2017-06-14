@@ -33,9 +33,13 @@ public final class Value {
 		return new Value(value, Type.MAP);
 	}
 
+	public static Value createNull() {
+		return new Value(null, Type.NULL);
+	}
+
 	public enum Type {
 
-		SCALAR, LIST, MAP;
+		SCALAR, LIST, MAP, NULL;
 	}
 
 }

@@ -12,5 +12,5 @@ import java.lang.annotation.Target;
 @Target(FIELD)
 public @interface Entry {
 
-	String name();
+	String value();
 }
