@@ -13,8 +13,9 @@ public final class Value {
 		this.type = type;
 	}
 
-	public Object getValue() {
-		return this.value;
+	@SuppressWarnings("unchecked")
+	public <T> T getValue() {
+		return (T) this.value;
 	}
 
 	public Type getType() {
@@ -35,6 +36,11 @@ public final class Value {
 
 	public static Value createNull() {
 		return new Value(null, Type.NULL);
+	}
+
+	@Override
+	public String toString() {
+		return this.value.toString();
 	}
 
 	public enum Type {

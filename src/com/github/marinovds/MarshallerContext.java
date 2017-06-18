@@ -5,6 +5,8 @@ import java.io.OutputStream;
 import java.util.HashMap;
 import java.util.Map;
 
+import com.github.marinovds.exceptions.UnserializableException;
+
 public final class MarshallerContext {
 
 	private static final Map<String, Marshaller> defaultMarshallers;
@@ -12,7 +14,8 @@ public final class MarshallerContext {
 
 	static {
 		defaultMarshallers = new HashMap<>();
-		// TODO add default implementations
+		defaultMarshallers.put(FormatNames.XML, new MarshallerImpl(FormatNames.XML, new SerializerXML()));
+		defaultMarshallers.put(FormatNames.JSON, new MarshallerImpl(FormatNames.JSON, new SerializerJSON()));
 	}
 
 	MarshallerContext() {
@@ -67,13 +70,13 @@ public final class MarshallerContext {
 		}
 
 		@Override
-		public void serialize(Object object, OutputStream stream) {
+		public void serialize(Object object, OutputStream stream) throws UnserializableException {
 			Value mappedValue = Mapper.toValue(object);
 			this.serializer.serialize(mappedValue, stream);
 		}
 
 		@Override
-		public <T> T deserialize(Class<T> clazz, InputStream stream) {
+		public <T> T deserialize(Class<T> clazz, InputStream stream) throws UnserializableException {
 			Value value = this.serializer.deserialize(clazz, stream);
 			return Mapper.toObject(clazz, value);
 		}

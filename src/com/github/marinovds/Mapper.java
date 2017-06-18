@@ -1,7 +1,9 @@
 package com.github.marinovds;
 
 import java.lang.reflect.Array;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -32,16 +34,17 @@ final class Mapper {
 		switch (type) {
 			case MAP:
 				if (object instanceof Map) {
-					return createMapValue(object);
+					throw new UnconvertableException("Cannot convert maps. Pass a Bean instead");
 				}
 				return createRootBeanValue(object);
 			case LIST:
-				return createListValue(object);
+				throw new UnconvertableException("Cannot convert collections or arrays. Pass a Bean instead");
 			case SCALAR:
-				return Value.createScalar(String.valueOf(object));
+				throw new UnconvertableException("Cannot convert scalars. Pass a Bean instead");
 			case NULL:
 				return Value.createNull();
 			default:
+				// Cannot happen
 				return Value.createNull();
 		}
 	}
@@ -73,6 +76,7 @@ final class Mapper {
 	}
 
 	private static boolean shouldSerialize(Field field) {
+		field.setAccessible(true);
 		Ignore ignore = field.getAnnotation(Ignore.class);
 		if (ignore != null) {
 			return false;
@@ -92,13 +96,10 @@ final class Mapper {
 		try {
 			Object value = field.get(object);
 			return objectToValue(value);
-		} catch (IllegalArgumentException e) {
-			Utility.throwUnchecked(e);
-		} catch (IllegalAccessException e) {
+		} catch (IllegalArgumentException | IllegalAccessException e) {
 			Utility.throwUnchecked(e);
 		}
-		// Cannot happen
-		return null;
+		return Value.createNull();
 	}
 
 	private static Type getValueType(Object value) {
@@ -224,24 +225,86 @@ final class Mapper {
 		Type type = value.getType();
 		switch (type) {
 			case MAP:
-				return null; // TODO
+				if (clazz.isAssignableFrom(Map.class)) {
+					throw new UnconvertableException("Cannot be converted to Map. Only beans can be converted");
+				}
+				return createBeanObject(clazz, value); //
 			case LIST:
-				return createCollectionObject(clazz, value);
+				throw new UnconvertableException(
+						"Cannot be converted to collection or array. Only beans can be converted");
 			case SCALAR:
-				return createScalarObject(clazz, value);
+				throw new UnconvertableException("Cannot be converted to scalar. Only beans can be converted");
 			case NULL:
 				return null;
 			default:
-				return null;
+				// Cannot happen
+				throw new UnconvertableException();
 		}
 	}
 
-	private static <T> T createScalarObject(Class<T> clazz, Value value) {
-		ConcreteType type = getConcreteType(clazz);
-		if (!isScalarType(type)) {
-			throw new UnconvertableException(clazz.getName() + " is not compatible for type " + Type.SCALAR);
+	private static <T> T createBeanObject(Class<T> clazz, Value value) {
+		try {
+			Constructor<T> constructor = getConstructor(clazz);
+			T instance = constructor.newInstance();
+			checkValueType(value, Type.MAP);
+			setValues(instance, value.getValue());
+			return instance;
+		} catch (SecurityException | InstantiationException | IllegalAccessException | IllegalArgumentException
+				| InvocationTargetException e) {
+			Utility.throwUnchecked(e);
+			// Cannot happen
+			return null;
 		}
-		return createScalarObject(type, (String) value.getValue());
+	}
+
+	private static void checkValueType(Value value, Type expectedType) {
+		Type actualType = value.getType();
+		if (actualType != expectedType) {
+			throw new UnconvertableException(
+					"Cannot convert types. Expected " + expectedType + " but " + actualType + " was present");
+		}
+	}
+
+	private static <T> Constructor<T> getConstructor(Class<T> clazz) {
+		try {
+			return clazz.getConstructor();
+		} catch (NoSuchMethodException | SecurityException e) {
+			Utility.throwUnchecked(e);
+			// Cannot happen
+			return null;
+		}
+	}
+
+	private static <T> void setValues(T instance, Map<String, Value> values) {
+		Class<?> clazz = instance.getClass();
+		values.forEach((fieldName, fieldValue) -> {
+			try {
+				Field field = clazz.getField(fieldName);
+				ResolvedType type = ResolvedType.create(field);
+				Object object = valueToObject(type, fieldValue);
+				field.set(instance, object);
+			} catch (NoSuchFieldException | SecurityException | IllegalArgumentException | IllegalAccessException e) {
+				Utility.throwUnchecked(e);
+			}
+		});
+
+	}
+
+	private static Object valueToObject(ResolvedType type, Value value) {
+		if (value == null) {
+			return null;
+		}
+		ConcreteType concreteType = getConcreteType(type.getType());
+		if (isScalarType(concreteType)) {
+			checkValueType(value, Type.SCALAR);
+			return createScalarObject(concreteType, (String) value.getValue());
+		}
+		if (isListType(concreteType)) {
+			checkValueType(value, Type.LIST);
+			return createCollectionObject(concreteType, type, value.getValue());
+		}
+		checkValueType(value, Type.MAP);
+		return createMapObject(concreteType, type, value);
 	}
 
 	@SuppressWarnings("unchecked")
@@ -265,42 +328,73 @@ final class Mapper {
 				return (T) stringToCharacter(value);
 			case STRING:
 				return (T) value;
+			case ARRAY:
+			case LIST:
+			case MAP:
+			case OBJECT:
+			case SET:
 			default:
-				return null;
+				// Cannot happen because of checks
+				throw new UnconvertableException();
+		}
+	}
+
+	private static boolean isListType(ConcreteType type) {
+		switch (type) {
+			case ARRAY:
+			case LIST:
+			case SET:
+				return true;
+			case BOOLEAN:
+			case BYTE:
+			case CHARACTER:
+			case DOUBLE:
+			case FLOAT:
+			case INTEGER:
+			case LONG:
+			case MAP:
+			case OBJECT:
+			case SHORT:
+			case STRING:
+			default:
+				return false;
 		}
 	}
 
 	@SuppressWarnings("unchecked")
-	private static <T> T createCollectionObject(Class<T> clazz, Value value) {
-		ConcreteType type = getConcreteType(clazz);
-		if (!isList(type)) {
-			throw new UnconvertableException(clazz.getName() + " is not compatible for type " + Type.LIST);
-		}
-		return createCollectionObject(type, clazz, (List<Value>) value.getValue());
-	}
-
-	@SuppressWarnings("unchecked")
-	private static <T> T createCollectionObject(ConcreteType type, Class<T> clazz, List<Value> value) {
-		Class<?> genericType = null;
+	private static <T> T createCollectionObject(ConcreteType type, ResolvedType resolvedType, List<Value> value) {
 		Class<?> componentType = null;
 		switch (type) {
 			case ARRAY:
-				componentType = clazz.getComponentType();
+				componentType = getComponentType(resolvedType);
 				return (T) createArrayObject(componentType, value);
 			case LIST:
-				genericType = getGenericType(clazz);
-				return (T) createListObject(genericType, value);
+				return (T) createListObject(resolvedType, value);
 			case SET:
-				genericType = getGenericType(clazz);
-				return (T) createSetObject(genericType, value);
+				return (T) createSetObject(resolvedType, value);
+			case BOOLEAN:
+			case BYTE:
+			case CHARACTER:
+			case DOUBLE:
+			case FLOAT:
+			case INTEGER:
+			case LONG:
+			case MAP:
+			case OBJECT:
+			case SHORT:
+			case STRING:
 			default:
-				return null;
+				// Cannot happen because of checks
+				throw new UnconvertableException();
 		}
 	}
 
-	private static Class<?> getGenericType(Class<?> clazz) {
-		// TODO
-		return null;
+	private static Class<?> getComponentType(ResolvedType type) {
+		Class<?> fieldType = type.getType();
+		if (fieldType.isArray()) {
+			return fieldType.getComponentType();
+		}
+		throw new UnconvertableException("Incompatible types: " + fieldType.getName() + " and " + Type.LIST);
 	}
 
 	private static Object createArrayObject(Class<?> componentType, List<Value> value) {
@@ -313,20 +407,75 @@ final class Mapper {
 		return retval;
 	}
 
-	private static Object createListObject(Class<?> clazz, List<Value> value) {
-		List<Object> retval = new ArrayList<>();
+	@SuppressWarnings("unchecked")
+	private static Object createListObject(ResolvedType resolvedType, List<Value> value) {
+		List<Object> retval = (List<Object>) getInstance(resolvedType, ArrayList.class);
+		ResolvedType genericType = resolvedType.getGenericTypes()[0];
 		value.forEach(element -> {
-			Object object = toObject(clazz, element);
+			Object object = valueToObject(genericType, element);
 			retval.add(object);
 		});
 		return retval;
 	}
 
-	private static Object createSetObject(Class<?> clazz, List<Value> value) {
-		Set<Object> retval = new HashSet<>();
+	@SuppressWarnings("unchecked")
+	private static Object createSetObject(ResolvedType resolvedType, List<Value> value) {
+		Set<Object> retval = (Set<Object>) getInstance(resolvedType, HashSet.class);
 		value.forEach(element -> {
-			Object object = toObject(clazz, element);
+			Object object = valueToObject(resolvedType, element);
 			retval.add(object);
+		});
+		return retval;
+	}
+
+	private static Object getInstance(ResolvedType resolvedType, Class<?> clazz) {
+		Class<?> type = resolvedType.getType();
+		try {
+			if (type.isInterface()) {
+				return clazz.newInstance();
+			}
+			return type.newInstance();
+		} catch (InstantiationException | IllegalAccessException e) {
+			Utility.throwUnchecked(e);
+			return null;
+		}
+	}
+
+	private static Object createMapObject(ConcreteType concreteType, ResolvedType type, Value value) {
+		switch (concreteType) {
+			case MAP:
+				return createMapObject(type, value.getValue());
+			case OBJECT:
+				return createBeanObject(type.getType(), value);
+			case ARRAY:
+			case BOOLEAN:
+			case BYTE:
+			case CHARACTER:
+			case DOUBLE:
+			case FLOAT:
+			case INTEGER:
+			case LIST:
+			case LONG:
+			case SET:
+			case SHORT:
+			case STRING:
+			default:
+				// Should not happen
+				throw new UnconvertableException();
+		}
+	}
+
+	// TODO refactor
+	@SuppressWarnings("unchecked")
+	private static Object createMapObject(ResolvedType type, Map<String, Value> values) {
+		Map<Object, Object> retval = (Map<Object, Object>) getInstance(type, HashMap.class);
+		ResolvedType keyResolvedType = type.getGenericTypes()[0];
+		ResolvedType valueResolvedType = type.getGenericTypes()[1];
+		values.forEach((key, value) -> {
+			ConcreteType keyType = getConcreteType(keyResolvedType.getType());
+			Object keyValue = createScalarObject(keyType, key);
+			Object valueValue = valueToObject(valueResolvedType, value);
+			retval.put(keyValue, valueValue);
 		});
 		return retval;
 	}
@@ -375,34 +524,26 @@ final class Mapper {
 	}
 
 	private static boolean isScalarType(ConcreteType type) {
-		if (type == ConcreteType.BOOLEAN) {
-			return true;
+		switch (type) {
+			case BOOLEAN:
+			case BYTE:
+			case INTEGER:
+			case LONG:
+			case SHORT:
+			case FLOAT:
+			case DOUBLE:
+			case CHARACTER:
+			case STRING:
+				return true;
+			case ARRAY:
+			case LIST:
+			case OBJECT:
+			case MAP:
+			case SET:
+			default:
+				// Cannot happen because of checks
+				return false;
 		}
-		if (type == ConcreteType.BYTE) {
-			return true;
-		}
-		if (type == ConcreteType.INTEGER) {
-			return true;
-		}
-		if (type == ConcreteType.LONG) {
-			return true;
-		}
-		if (type == ConcreteType.SHORT) {
-			return true;
-		}
-		if (type == ConcreteType.FLOAT) {
-			return true;
-		}
-		if (type == ConcreteType.DOUBLE) {
-			return true;
-		}
-		if (type == ConcreteType.CHARACTER) {
-			return true;
-		}
-		if (type == ConcreteType.STRING) {
-			return true;
-		}
-		return false;
 	}
 
 	private static Character stringToCharacter(String value) {
