@@ -246,7 +246,6 @@ final class Mapper {
 		try {
 			Constructor<T> constructor = getConstructor(clazz);
 			T instance = constructor.newInstance();
-			checkValueType(value, Type.MAP);
 			setValues(instance, value.getValue());
 			return instance;
 		} catch (SecurityException | InstantiationException | IllegalAccessException | IllegalArgumentException
@@ -279,7 +278,7 @@ final class Mapper {
 		Class<?> clazz = instance.getClass();
 		values.forEach((fieldName, fieldValue) -> {
 			try {
-				Field field = clazz.getField(fieldName);
+				Field field = getField(clazz, fieldName);
 				ResolvedType type = ResolvedType.create(field);
 				Object object = valueToObject(type, fieldValue);
 				field.set(instance, object);
@@ -288,6 +287,12 @@ final class Mapper {
 			}
 		});
 
+	}
+
+	private static Field getField(Class<?> clazz, String fieldName) throws NoSuchFieldException, SecurityException {
+		Field retval = clazz.getDeclaredField(fieldName);
+		retval.setAccessible(true);
+		return retval;
 	}
 
 	private static Object valueToObject(ResolvedType type, Value value) {
@@ -363,11 +368,9 @@ final class Mapper {
 
 	@SuppressWarnings("unchecked")
 	private static <T> T createCollectionObject(ConcreteType type, ResolvedType resolvedType, List<Value> value) {
-		Class<?> componentType = null;
 		switch (type) {
 			case ARRAY:
-				componentType = getComponentType(resolvedType);
-				return (T) createArrayObject(componentType, value);
+				return (T) createArrayObject(resolvedType, value);
 			case LIST:
 				return (T) createListObject(resolvedType, value);
 			case SET:
@@ -397,12 +400,14 @@ final class Mapper {
 		throw new UnconvertableException("Incompatible types: " + fieldType.getName() + " and " + Type.LIST);
 	}
 
-	private static Object createArrayObject(Class<?> componentType, List<Value> value) {
+	// TODO make it work
+	private static Object createArrayObject(ResolvedType resolvedType, List<Value> value) {
 		int length = value.size();
+		Class<?> componentType = getComponentType(resolvedType);
 		Object retval = Array.newInstance(componentType, length);
 		for (int i = 0; i < length; i++) {
 			Value element = value.get(i);
-			Array.set(retval, i, toObject(componentType, element));
+			Array.set(retval, i, valueToObject(ResolvedType.fromComponentType(componentType), element));
 		}
 		return retval;
 	}
@@ -421,8 +426,9 @@ final class Mapper {
 	@SuppressWarnings("unchecked")
 	private static Object createSetObject(ResolvedType resolvedType, List<Value> value) {
 		Set<Object> retval = (Set<Object>) getInstance(resolvedType, HashSet.class);
+		ResolvedType genericType = resolvedType.getGenericTypes()[0];
 		value.forEach(element -> {
-			Object object = valueToObject(resolvedType, element);
+			Object object = valueToObject(genericType, element);
 			retval.add(object);
 		});
 		return retval;
@@ -465,7 +471,6 @@ final class Mapper {
 		}
 	}
 
-	// TODO refactor
 	@SuppressWarnings("unchecked")
 	private static Object createMapObject(ResolvedType type, Map<String, Value> values) {
 		Map<Object, Object> retval = (Map<Object, Object>) getInstance(type, HashMap.class);
@@ -481,43 +486,43 @@ final class Mapper {
 	}
 
 	private static ConcreteType getConcreteType(Class<?> clazz) {
-		if (clazz.isAssignableFrom(Boolean.class) || clazz.isAssignableFrom(boolean.class)) {
+		if (Boolean.class.isAssignableFrom(clazz) || boolean.class.isAssignableFrom(clazz)) {
 			return ConcreteType.BOOLEAN;
 		}
-		if (clazz.isAssignableFrom(Byte.class) || clazz.isAssignableFrom(byte.class)) {
+		if (Byte.class.isAssignableFrom(clazz) || byte.class.isAssignableFrom(clazz)) {
 			return ConcreteType.BYTE;
 		}
-		if (clazz.isAssignableFrom(Integer.class) || clazz.isAssignableFrom(int.class)) {
+		if (Integer.class.isAssignableFrom(clazz) || int.class.isAssignableFrom(clazz)) {
 			return ConcreteType.INTEGER;
 		}
-		if (clazz.isAssignableFrom(Long.class) || clazz.isAssignableFrom(long.class)) {
+		if (Long.class.isAssignableFrom(clazz) || long.class.isAssignableFrom(clazz)) {
 			return ConcreteType.LONG;
 		}
-		if (clazz.isAssignableFrom(Short.class) || clazz.isAssignableFrom(short.class)) {
+		if (Short.class.isAssignableFrom(clazz) || short.class.isAssignableFrom(clazz)) {
 			return ConcreteType.SHORT;
 		}
-		if (clazz.isAssignableFrom(Float.class) || clazz.isAssignableFrom(float.class)) {
+		if (Float.class.isAssignableFrom(clazz) || float.class.isAssignableFrom(clazz)) {
 			return ConcreteType.FLOAT;
 		}
-		if (clazz.isAssignableFrom(Double.class) || clazz.isAssignableFrom(double.class)) {
+		if (Double.class.isAssignableFrom(clazz) || double.class.isAssignableFrom(clazz)) {
 			return ConcreteType.DOUBLE;
 		}
-		if (clazz.isAssignableFrom(Character.class) || clazz.isAssignableFrom(char.class)) {
+		if (Character.class.isAssignableFrom(clazz) || char.class.isAssignableFrom(clazz)) {
 			return ConcreteType.CHARACTER;
 		}
-		if (clazz.isAssignableFrom(String.class)) {
+		if (String.class.isAssignableFrom(clazz)) {
 			return ConcreteType.STRING;
 		}
 		if (clazz.isArray()) {
 			return ConcreteType.ARRAY;
 		}
-		if (clazz.isAssignableFrom(Set.class)) {
+		if (Set.class.isAssignableFrom(clazz)) {
 			return ConcreteType.SET;
 		}
-		if (clazz.isAssignableFrom(List.class) || clazz.isAssignableFrom(Collection.class)) {
+		if (Collection.class.isAssignableFrom(clazz)) {
 			return ConcreteType.LIST;
 		}
-		if (clazz.isAssignableFrom(Map.class)) {
+		if (Map.class.isAssignableFrom(clazz)) {
 			return ConcreteType.MAP;
 		}
 		return ConcreteType.OBJECT;

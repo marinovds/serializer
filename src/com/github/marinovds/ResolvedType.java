@@ -5,16 +5,21 @@ import java.lang.reflect.Type;
 
 final class ResolvedType {
 
+	private static final String COMMA = ", ";
+
+	private static final char GENERIC_OPENING = '<';
+	private static final char GENERIC_CLOSING = '>';
+
 	static final ResolvedType[] EMPTY_TYPES = new ResolvedType[0];
 
 	private final Class<?> clazz;
 	private final ResolvedType[] genericTypes;
 
-	public ResolvedType(Class<?> type) {
+	ResolvedType(Class<?> type) {
 		this(type, EMPTY_TYPES);
 	}
 
-	public ResolvedType(Class<?> type, ResolvedType[] generics) {
+	ResolvedType(Class<?> type, ResolvedType[] generics) {
 		this.clazz = type;
 		this.genericTypes = generics;
 	}
@@ -30,16 +35,16 @@ final class ResolvedType {
 	@Override
 	public String toString() {
 		StringBuilder builder = new StringBuilder(this.clazz.getName());
-		appendBracket(builder, '<');
+		appendBracket(builder, GENERIC_OPENING);
 		int length = this.genericTypes.length;
 		for (int i = 0; i < length; i++) {
 			String type = this.genericTypes[i].toString();
 			builder.append(type);
 			if (i != length - 1) {
-				builder.append(", ");
+				builder.append(COMMA);
 			}
 		}
-		appendBracket(builder, '>');
+		appendBracket(builder, GENERIC_CLOSING);
 		return builder.toString();
 	}
 
@@ -58,10 +63,12 @@ final class ResolvedType {
 		return TypeParser.parse(type.getTypeName());
 	}
 
+	public static ResolvedType fromComponentType(Class<?> componentType) {
+		return new ResolvedType(componentType);
+	}
+
 	private static class TypeParser {
 
-		private static final char GENERIC_OPENING = '<';
-		private static final char GENERIC_CLOSING = '>';
 		private static final int NOT_FOUND = -1;
 
 		public static ResolvedType parse(String type) {
@@ -91,7 +98,7 @@ final class ResolvedType {
 
 		private static ResolvedType[] getGenerics(String genericsString) {
 
-			String[] generics = genericsString.split(", ");
+			String[] generics = genericsString.split(COMMA);
 			int length = generics.length;
 			ResolvedType[] retval = (length == 0) ? EMPTY_TYPES : new ResolvedType[length];
 			for (int i = 0; i < length; i++) {

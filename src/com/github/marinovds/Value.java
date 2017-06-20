@@ -8,7 +8,7 @@ public final class Value {
 	private final Object value;
 	private final Type type;
 
-	private Value(Object value, Type type) {
+	private Value(final Object value, final Type type) {
 		this.value = value;
 		this.type = type;
 	}
@@ -22,15 +22,15 @@ public final class Value {
 		return this.type;
 	}
 
-	public static Value createScalar(String value) {
+	public static Value createScalar(final String value) {
 		return new Value(value, Type.SCALAR);
 	}
 
-	public static Value createList(List<Value> value) {
+	public static Value createList(final List<Value> value) {
 		return new Value(value, Type.LIST);
 	}
 
-	public static Value createMap(Map<String, Value> value) {
+	public static Value createMap(final Map<String, Value> value) {
 		return new Value(value, Type.MAP);
 	}
 

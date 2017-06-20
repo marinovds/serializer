@@ -5,7 +5,7 @@ import java.util.Map;
 
 public final class Contexts {
 
-	private static final Map<String, MarshallerContext> contexts;
+	private static final Map<String, MarshallerContextImpl> contexts;
 
 	static {
 		contexts = new HashMap<>();
@@ -15,11 +15,15 @@ public final class Contexts {
 		throw new UnsupportedOperationException(Utility.MSG_UTILITY_INSTANTIATION);
 	}
 
+	public static MarshallerContext getDefault() {
+		return MarshallerContextImpl.DEFAULT_CONTEXT;
+	}
+
 	public static MarshallerContext get(String contextID) {
 		Utility.validateInput(contextID, "Context identifier cannot be null");
-		MarshallerContext retval = contexts.get(contextID);
+		MarshallerContextImpl retval = contexts.get(contextID);
 		if (retval == null) {
-			retval = new MarshallerContext();
+			retval = new MarshallerContextImpl();
 			contexts.put(contextID, retval);
 		}
 		return retval;
