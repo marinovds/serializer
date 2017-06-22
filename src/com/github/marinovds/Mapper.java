@@ -222,13 +222,14 @@ final class Mapper {
 	//////////////////////////////////////////////////////////////////////////
 
 	public static <T> T toObject(Class<T> clazz, Value value) {
-		Type type = value.getType();
+		Value val = getCorrectValue(clazz, value);
+		Type type = val.getType();
 		switch (type) {
 			case MAP:
 				if (clazz.isAssignableFrom(Map.class)) {
 					throw new UnconvertableException("Cannot be converted to Map. Only beans can be converted");
 				}
-				return createBeanObject(clazz, value); //
+				return createBeanObject(clazz, val); //
 			case LIST:
 				throw new UnconvertableException(
 						"Cannot be converted to collection or array. Only beans can be converted");
@@ -240,6 +241,20 @@ final class Mapper {
 				// Cannot happen
 				throw new UnconvertableException();
 		}
+	}
+
+	private static Value getCorrectValue(Class<?> clazz, Value value) {
+		Type type = value.getType();
+		if (type != Type.MAP) {
+			throw new UnconvertableException("Cannot convert non Map values");
+		}
+		Map<String, Value> correctValue = value.getValue();
+		String className = clazz.getSimpleName();
+		Value val = correctValue.get(className);
+		if (correctValue.size() == 1 && val != null) {
+			return val;
+		}
+		return value;
 	}
 
 	private static <T> T createBeanObject(Class<T> clazz, Value value) {

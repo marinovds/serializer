@@ -22,15 +22,15 @@ public final class Value {
 		return this.type;
 	}
 
-	public static Value createScalar(final String value) {
+	public static Value createScalar(String value) {
 		return new Value(value, Type.SCALAR);
 	}
 
-	public static Value createList(final List<Value> value) {
+	public static Value createList(List<Value> value) {
 		return new Value(value, Type.LIST);
 	}
 
-	public static Value createMap(final Map<String, Value> value) {
+	public static Value createMap(Map<String, Value> value) {
 		return new Value(value, Type.MAP);
 	}
 

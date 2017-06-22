@@ -7,8 +7,8 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -149,6 +149,8 @@ public class SerializerJSON implements Serializer {
 		return prettify(elementName) + OPERATOR_ASSING;
 	}
 
+	/////////////////////////////////////////////////////////////////////////////////
+
 	@Override
 	public Value deserialize(Class<?> clazz, InputStream stream) throws UnserializableException {
 		try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream));) {
@@ -157,7 +159,6 @@ public class SerializerJSON implements Serializer {
 		} catch (IOException e) {
 			throw new UnserializableException("Object could not be deserialized", e);
 		}
-
 	}
 
 	private static StringBuilder getBuffer(BufferedReader reader) throws IOException {
@@ -171,8 +172,11 @@ public class SerializerJSON implements Serializer {
 	}
 
 	private static Value readMapValue(StringBuilder input) throws UnserializableException {
-		Map<String, Value> retval = new HashMap<>();
 		delete(input, String.valueOf(OPENING_BRACKET));
+		if (isEmptyMap(input)) {
+			return Value.createMap(Collections.emptyMap());
+		}
+		Map<String, Value> retval = new HashMap<>();
 		do {
 			removeComma(input);
 			String key = extractKey(input);
@@ -245,25 +249,18 @@ public class SerializerJSON implements Serializer {
 	}
 
 	private static Value readListValue(StringBuilder input) throws UnserializableException {
-		List<Value> retval = new ArrayList<>();
 		delete(input, String.valueOf(OPENING_ARRAY_BRACKET));
+		if (isEmptyList(input)) {
+			return Value.createList(Collections.emptyList());
+		}
+		List<Value> retval = new ArrayList<>();
 		do {
 			removeComma(input);
 			Value value = readValue(input);
 			retval.add(value);
 		} while (input.charAt(0) == COMMA);
 		require(input, CLOSING_ARRAY_BRACKET);
-		removeNulls(retval);
 		return Value.createList(retval);
-	}
-
-	private static void removeNulls(List<Value> list) {
-		for (Iterator<Value> iterator = list.iterator(); iterator.hasNext();) {
-			Value value = iterator.next();
-			if (value == null) {
-				iterator.remove();
-			}
-		}
 	}
 
 	private static void removeComma(StringBuilder input) {
@@ -305,6 +302,14 @@ public class SerializerJSON implements Serializer {
 
 	private static boolean isListValue(StringBuilder input) {
 		return isValueType(input, OPENING_ARRAY_BRACKET);
+	}
+
+	private static boolean isEmptyMap(StringBuilder input) {
+		return isValueType(input, CLOSING_BRACKET.charAt(0));
+	}
+
+	private static boolean isEmptyList(StringBuilder input) {
+		return isValueType(input, CLOSING_ARRAY_BRACKET.charAt(0));
 	}
 
 	private static void require(StringBuilder input, String string) throws UnserializableException {
