@@ -1,4 +1,4 @@
-package com.github.marinovds;
+package com.github.marinovds.serializer;
 
 import java.util.HashMap;
 import java.util.Map;

@@ -1,9 +1,9 @@
-package com.github.marinovds;
+package com.github.marinovds.serializer;
 
 import java.io.InputStream;
 import java.io.OutputStream;
 
-import com.github.marinovds.exceptions.UnserializableException;
+import com.github.marinovds.serializer.exceptions.UnserializableException;
 
 public interface Serializer {
 

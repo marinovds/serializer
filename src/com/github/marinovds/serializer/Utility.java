@@ -1,4 +1,4 @@
-package com.github.marinovds;
+package com.github.marinovds.serializer;
 
 public class Utility {
 
@@ -8,11 +8,11 @@ public class Utility {
 		throw new UnsupportedOperationException(MSG_UTILITY_INSTANTIATION);
 	}
 
-	public static void throwUnchecked(final Exception ex) {
+	public static void throwUnchecked(Exception ex) {
 		Utility.<RuntimeException>throwsUnchecked(ex);
 	}
 
-	private static <T extends Exception> void throwsUnchecked(final Exception toThrow) throws T {
+	private static <T extends Exception> void throwsUnchecked(Exception toThrow) throws T {
 		throw (T) toThrow;
 	}
 

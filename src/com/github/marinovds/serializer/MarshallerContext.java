@@ -1,4 +1,4 @@
-package com.github.marinovds;
+package com.github.marinovds.serializer;
 
 public interface MarshallerContext {
 

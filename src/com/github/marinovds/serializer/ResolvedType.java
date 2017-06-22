@@ -1,4 +1,4 @@
-package com.github.marinovds;
+package com.github.marinovds.serializer;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Type;

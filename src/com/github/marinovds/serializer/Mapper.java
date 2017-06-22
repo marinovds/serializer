@@ -1,4 +1,4 @@
-package com.github.marinovds;
+package com.github.marinovds.serializer;
 
 import java.lang.reflect.Array;
 import java.lang.reflect.Constructor;
@@ -17,11 +17,11 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import com.github.marinovds.Value.Type;
-import com.github.marinovds.annotations.Entry;
-import com.github.marinovds.annotations.Ignore;
-import com.github.marinovds.annotations.Root;
-import com.github.marinovds.exceptions.UnconvertableException;
+import com.github.marinovds.serializer.Value.Type;
+import com.github.marinovds.serializer.annotations.Entry;
+import com.github.marinovds.serializer.annotations.Ignore;
+import com.github.marinovds.serializer.annotations.Root;
+import com.github.marinovds.serializer.exceptions.UnconvertableException;
 
 final class Mapper {
 
@@ -57,7 +57,7 @@ final class Mapper {
 	}
 
 	private static String getRootName(Class<?> clazz) {
-		Root root = clazz.getAnnotation(Root.class);
+		Root root = clazz.getDeclaredAnnotation(Root.class);
 		if (root != null) {
 			return root.value();
 		}
@@ -77,7 +77,7 @@ final class Mapper {
 
 	private static boolean shouldSerialize(Field field) {
 		field.setAccessible(true);
-		Ignore ignore = field.getAnnotation(Ignore.class);
+		Ignore ignore = field.getDeclaredAnnotation(Ignore.class);
 		if (ignore != null) {
 			return false;
 		}
@@ -85,7 +85,7 @@ final class Mapper {
 	}
 
 	private static String getEntryName(Field field) {
-		Entry entry = field.getAnnotation(Entry.class);
+		Entry entry = field.getDeclaredAnnotation(Entry.class);
 		if (entry != null) {
 			return entry.value();
 		}
@@ -297,17 +297,23 @@ final class Mapper {
 				ResolvedType type = ResolvedType.create(field);
 				Object object = valueToObject(type, fieldValue);
 				field.set(instance, object);
-			} catch (NoSuchFieldException | SecurityException | IllegalArgumentException | IllegalAccessException e) {
-				Utility.throwUnchecked(e);
+			} catch (SecurityException | IllegalArgumentException | IllegalAccessException e) {
+				throw new UnconvertableException("Cannot create object", e);
 			}
 		});
 
 	}
 
-	private static Field getField(Class<?> clazz, String fieldName) throws NoSuchFieldException, SecurityException {
-		Field retval = clazz.getDeclaredField(fieldName);
-		retval.setAccessible(true);
-		return retval;
+	private static Field getField(Class<?> clazz, String fieldName) throws SecurityException {
+		Field[] fields = clazz.getDeclaredFields();
+		for (Field field : fields) {
+			String entryName = getEntryName(field);
+			if (fieldName.equals(entryName)) {
+				field.setAccessible(true);
+				return field;
+			}
+		}
+		throw new UnconvertableException("Field " + fieldName + " could not be found");
 	}
 
 	private static Object valueToObject(ResolvedType type, Value value) {

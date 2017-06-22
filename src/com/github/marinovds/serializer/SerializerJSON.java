@@ -1,4 +1,4 @@
-package com.github.marinovds;
+package com.github.marinovds.serializer;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -12,8 +12,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.github.marinovds.Value.Type;
-import com.github.marinovds.exceptions.UnserializableException;
+import com.github.marinovds.serializer.Value.Type;
+import com.github.marinovds.serializer.exceptions.UnserializableException;
 
 public class SerializerJSON implements Serializer {
 

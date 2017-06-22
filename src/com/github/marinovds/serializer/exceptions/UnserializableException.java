@@ -1,4 +1,4 @@
-package com.github.marinovds.exceptions;
+package com.github.marinovds.serializer.exceptions;
 
 public class UnserializableException extends Exception {
 

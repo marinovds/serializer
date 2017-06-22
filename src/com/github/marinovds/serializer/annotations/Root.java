@@ -1,4 +1,4 @@
-package com.github.marinovds.annotations;
+package com.github.marinovds.serializer.annotations;
 
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
@@ -8,8 +8,8 @@ import java.lang.annotation.Target;
 
 @Documented
 @Retention(RetentionPolicy.RUNTIME)
-@Target(ElementType.FIELD)
-public @interface Ignore {
+@Target(ElementType.TYPE)
+public @interface Root {
 
-	// No need for state
+	String value();
 }

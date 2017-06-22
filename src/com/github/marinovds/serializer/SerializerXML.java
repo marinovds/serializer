@@ -1,4 +1,4 @@
-package com.github.marinovds;
+package com.github.marinovds.serializer;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -14,8 +14,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.github.marinovds.Value.Type;
-import com.github.marinovds.exceptions.UnserializableException;
+import com.github.marinovds.serializer.Value.Type;
+import com.github.marinovds.serializer.exceptions.UnserializableException;
 
 class SerializerXML implements Serializer {
 
@@ -131,33 +131,33 @@ class SerializerXML implements Serializer {
 	public Value deserialize(Class<?> clazz, InputStream stream) throws UnserializableException {
 		try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream));) {
 			StringBuilder buffer = getBuffer(reader);
-			readObjectValue(buffer, clazz);
-			Entry entry = readEntry(buffer, clazz);
-			return Value.createMap(Collections.singletonMap(entry.getTagName(), entry.getTagValue()));
+			return readObjectValue(buffer, clazz);
 		} catch (IOException e) {
 			throw new UnserializableException("Object could not be deserialized", e);
 		}
 	}
 
-	private Value readObjectValue(StringBuilder input, Class<?> clazz) throws UnserializableException {
+	private static Value readObjectValue(StringBuilder input, Class<?> clazz) throws UnserializableException {
 		Map<String, Value> retval = new HashMap<>();
 		String className = getOpeningTag(input);
 		do {
-			stripClosingBracket(input);
 			String tagName = getOpeningTag(input);
-			Field field;
-			try {
-				field = clazz.getDeclaredField(tagName);
-			} catch (NoSuchFieldException | SecurityException e) {
-				throw new UnserializableException("Object cannot be deserialized", e);
-			}
-			ResolvedType type = ResolvedType.create(field);
-			// TODO
-			Value value = readValue(input, null, null);
+			stripClosingBracket(input);
+			ResolvedType type = getResolvedType(tagName, clazz);
+			Value value = readValue(input, tagName, type);
 			retval.put(tagName, value);
 		} while (!isClosingTag(input, className));
 		delete(input, writeClosingTag(className));
 		return Value.createMap(retval);
+	}
+
+	private static ResolvedType getResolvedType(String tagName, Class<?> clazz) throws UnserializableException {
+		try {
+			Field field = clazz.getDeclaredField(tagName);
+			return ResolvedType.create(field);
+		} catch (NoSuchFieldException | SecurityException e) {
+			throw new UnserializableException("Object cannot be deserialized", e);
+		}
 	}
 
 	private static StringBuilder getBuffer(BufferedReader reader) throws IOException {
@@ -170,20 +170,47 @@ class SerializerXML implements Serializer {
 		return retval;
 	}
 
-	private static Value readValue(StringBuilder input, String tagName, Class<?> clazz) throws UnserializableException {
-		XMLType type = getXMLType(clazz);
+	private static Value readValue(StringBuilder input, String tagName, ResolvedType type)
+			throws UnserializableException {
+		XMLType xmlType = getXMLType(type.getType());
 		if (isEmptyTag(input)) {
 			removeEmpty(input);
 			return Value.createNull();
 		}
-		if (isListValue(input)) {
-			Value retval = readListValue(input, tagName, clazz);
-
-			return retval;
+		switch (xmlType) {
+			case ARRAY:
+				ResolvedType componentType = ResolvedType.fromComponentType(type.getType().getComponentType());
+				return readListValue(input, tagName, componentType);
+			case LIST:
+				return readListValue(input, tagName, type.getGenericTypes()[0]);
+			case MAP:
+				return readMapValue(input, tagName, type.getGenericTypes()[1]);
+			case OBJECT:
+				return readObjectValue(input, type.getType());
+			case SCALAR:
+				Value retval = readScalarValue(input);
+				delete(input, writeClosingTag(tagName));
+				return retval;
+			default:
+				return Value.createNull();
 		}
-		Value retval = readScalarValue(input);
+	}
+
+	private static Value readMapValue(StringBuilder input, String tagName, ResolvedType resolvedType)
+			throws UnserializableException {
+		Map<String, Value> retval = new HashMap<>();
+		do {
+			String keyName = getOpeningTag(input);
+			if (isClosingTag(keyName, tagName)) {
+				stripClosingBracket(input);
+				return Value.createMap(Collections.emptyMap());
+			}
+			stripClosingBracket(input);
+			Value value = readValue(input, keyName, resolvedType);
+			retval.put(keyName, value);
+		} while (!isClosingTag(input, tagName));
 		delete(input, writeClosingTag(tagName));
-		return retval;
+		return Value.createMap(retval);
 	}
 
 	private static Value readScalarValue(StringBuilder input) {
@@ -193,55 +220,24 @@ class SerializerXML implements Serializer {
 		return Value.createScalar(retval);
 	}
 
-	private static Value readListValue(StringBuilder input, String tagName, Class<?> clazz)
+	private static Value readListValue(StringBuilder input, String tagName, ResolvedType resolvedType)
 			throws UnserializableException {
-		List<Entry> retval = new ArrayList<>();
+		List<Value> retval = new ArrayList<>();
 		do {
+			String elementName = getOpeningTag(input);
+			if (isClosingTag(elementName, tagName)) {
+				stripClosingBracket(input);
+				return Value.createList(Collections.emptyList());
+			}
 			stripClosingBracket(input);
-			Entry entry = readEntry(input, clazz);
-			retval.add(entry);
+			retval.add(readValue(input, ELEMENT, resolvedType));
 		} while (!isClosingTag(input, tagName));
 		delete(input, writeClosingTag(tagName));
-		return toValue(retval);
-	}
-
-	private static Entry readEntry(StringBuilder input, Class<?> clazz) throws UnserializableException {
-		String tagName = getOpeningTag(input);
-		stripClosingBracket(input);
-		return new Entry(tagName, readValue(input, tagName, clazz));
-	}
-
-	private static Value toValue(List<Entry> input) {
-		if (hasSameKeys(input)) {
-			return createListValue(input);
-		}
-		return createMapValue(input);
-	}
-
-	private static Value createMapValue(List<Entry> input) {
-		Map<String, Value> retval = new HashMap<>();
-		input.forEach(entry -> {
-			String key = entry.getTagName();
-			Value value = entry.getTagValue();
-			retval.put(key, value);
-		});
-		return Value.createMap(retval);
-	}
-
-	private static Value createListValue(List<Entry> input) {
-		List<Value> retval = new ArrayList<>();
-		input.forEach(entry -> {
-			Value value = entry.getTagValue();
-			retval.add(value);
-		});
 		return Value.createList(retval);
 	}
 
-	private static boolean hasSameKeys(List<Entry> input) {
-		for (Entry entry : input) {
-			return entry.getTagName().equals(ELEMENT);
-		}
-		return false;
+	private static boolean isClosingTag(String elementName, String tagName) {
+		return elementName.equals(TAG_CLOSER + tagName);
 	}
 
 	private static void removeEmpty(StringBuilder input) {
@@ -271,16 +267,6 @@ class SerializerXML implements Serializer {
 	private static boolean isValueType(StringBuilder input, char valueType) {
 		char type = getFirstChar(input);
 		return type == valueType;
-	}
-
-	private static boolean isListValue(StringBuilder input) {
-		return isValueType(input, OPENING_BRACKET) && notClosingTag(input);
-	}
-
-	private static boolean notClosingTag(StringBuilder input) {
-		int openingIndex = getFirstCharIndex(input);
-		int closingIndex = input.indexOf(CLOSING_TAG_BRAKET);
-		return openingIndex != closingIndex;
 	}
 
 	private static char getFirstChar(StringBuilder input) {
@@ -320,8 +306,11 @@ class SerializerXML implements Serializer {
 	}
 
 	private static XMLType getXMLType(Class<?> clazz) {
-		if (Collection.class.isAssignableFrom(clazz) || clazz.isArray()) {
+		if (Collection.class.isAssignableFrom(clazz)) {
 			return XMLType.LIST;
+		}
+		if (clazz.isArray()) {
+			return XMLType.ARRAY;
 		}
 		if (Map.class.isAssignableFrom(clazz)) {
 			return XMLType.MAP;
@@ -363,31 +352,7 @@ class SerializerXML implements Serializer {
 		return false;
 	}
 
-	private static class Entry {
-
-		private final String tagName;
-		private final Value tagValue;
-
-		public Entry(String name, Value value) {
-			this.tagName = name;
-			this.tagValue = value;
-		}
-
-		public String getTagName() {
-			return this.tagName;
-		}
-
-		public Value getTagValue() {
-			return this.tagValue;
-		}
-
-		@Override
-		public String toString() {
-			return this.tagName + ": " + this.tagValue;
-		}
-	}
-
 	private static enum XMLType {
-		SCALAR, LIST, MAP, OBJECT;
+		SCALAR, ARRAY, LIST, MAP, OBJECT;
 	}
 }

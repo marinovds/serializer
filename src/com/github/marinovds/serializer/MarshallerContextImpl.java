@@ -1,11 +1,11 @@
-package com.github.marinovds;
+package com.github.marinovds.serializer;
 
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.HashMap;
 import java.util.Map;
 
-import com.github.marinovds.exceptions.UnserializableException;
+import com.github.marinovds.serializer.exceptions.UnserializableException;
 
 final class MarshallerContextImpl implements MarshallerContext {
 
@@ -49,6 +49,7 @@ final class MarshallerContextImpl implements MarshallerContext {
 	@Override
 	public boolean addFormat(String formatName, Serializer serializer) {
 		Utility.validateInput(formatName, "Format cannot be null");
+		Utility.validateInput(serializer, "Serializer cannot be null");
 		return this.holder.put(formatName, new MarshallerImpl(formatName, serializer)) == null;
 	}
 
