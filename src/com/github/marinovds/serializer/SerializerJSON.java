@@ -109,9 +109,6 @@ public class SerializerJSON implements Serializer {
 		StringBuilder retval = new StringBuilder();
 		retval.append(OPENING_ARRAY_BRACKET);
 		listValue.forEach(value -> {
-			if (value.getType() == Type.NULL) {
-				retval.append(NULL);
-			}
 			retval.append(writeValue(value, indentation));
 			retval.append(COMMA);
 		});
@@ -132,9 +129,6 @@ public class SerializerJSON implements Serializer {
 		StringBuilder retval = new StringBuilder();
 		retval.append(OPENING_BRACKET);
 		mapValue.forEach((elementName, value) -> {
-			if (value.getType() == Type.NULL) {
-				retval.append(NULL);
-			}
 			retval.append(NEW_LINE);
 			retval.append(indent(indentation));
 			retval.append(writeOpeningElement(elementName));
@@ -214,7 +208,7 @@ public class SerializerJSON implements Serializer {
 
 	private static Value readScalarValue(StringBuilder input) throws UnserializableException {
 		String value = extractValue(input);
-		return (value == null) ? null : Value.createScalar(value);
+		return (value == null) ? Value.createNull() : Value.createScalar(value);
 	}
 
 	private static String extractValue(StringBuilder input) throws UnserializableException {
@@ -224,7 +218,7 @@ public class SerializerJSON implements Serializer {
 			return null;
 		}
 		input.delete(0, index);
-		return stripQuotes(key);
+		return (key.equals(NULL)) ? null : stripQuotes(key);
 	}
 
 	private static int getIndex(StringBuilder input) throws UnserializableException {

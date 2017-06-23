@@ -116,10 +116,7 @@ final class Mapper {
 	}
 
 	private static boolean isNull(Object value) {
-		if (value == null) {
-			return true;
-		}
-		return false;
+		return (value == null);
 	}
 
 	private static boolean isScalar(Object value) {
@@ -273,7 +270,7 @@ final class Mapper {
 
 	private static void checkValueType(Value value, Type expectedType) {
 		Type actualType = value.getType();
-		if (actualType != expectedType) {
+		if (actualType != expectedType && actualType != Type.NULL) {
 			throw new UnconvertableException(
 					"Cannot convert types. Expected " + expectedType + " but " + actualType + " was present");
 		}
@@ -296,7 +293,9 @@ final class Mapper {
 				Field field = getField(clazz, fieldName);
 				ResolvedType type = ResolvedType.create(field);
 				Object object = valueToObject(type, fieldValue);
-				field.set(instance, object);
+				if (object != null) {
+					field.set(instance, object);
+				}
 			} catch (SecurityException | IllegalArgumentException | IllegalAccessException e) {
 				throw new UnconvertableException("Cannot create object", e);
 			}
@@ -317,7 +316,7 @@ final class Mapper {
 	}
 
 	private static Object valueToObject(ResolvedType type, Value value) {
-		if (value == null) {
+		if (value.getType() == Type.NULL) {
 			return null;
 		}
 		ConcreteType concreteType = getConcreteType(type.getType());
@@ -421,7 +420,6 @@ final class Mapper {
 		throw new UnconvertableException("Incompatible types: " + fieldType.getName() + " and " + Type.LIST);
 	}
 
-	// TODO make it work
 	private static Object createArrayObject(ResolvedType resolvedType, List<Value> value) {
 		int length = value.size();
 		Class<?> componentType = getComponentType(resolvedType);

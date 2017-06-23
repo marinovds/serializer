@@ -56,7 +56,7 @@ final class ResolvedType {
 
 	public static ResolvedType create(Field field) {
 		Class<?> clazz = field.getType();
-		if (clazz.isArray()) {
+		if (clazz.isArray() || clazz.isPrimitive()) {
 			return new ResolvedType(clazz);
 		}
 		Type type = field.getGenericType();

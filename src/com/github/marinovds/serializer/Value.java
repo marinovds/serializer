@@ -40,7 +40,7 @@ public final class Value {
 
 	@Override
 	public String toString() {
-		return this.value.toString();
+		return String.valueOf(this.value);
 	}
 
 	public enum Type {

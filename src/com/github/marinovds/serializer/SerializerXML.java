@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.github.marinovds.serializer.Value.Type;
+import com.github.marinovds.serializer.annotations.Entry;
 import com.github.marinovds.serializer.exceptions.UnserializableException;
 
 class SerializerXML implements Serializer {
@@ -27,6 +28,7 @@ class SerializerXML implements Serializer {
 	private static final String ELEMENT = "element";
 	private static final char SPACE = ' ';
 	private static final String CLOSING_TAG_BRAKET = "" + OPENING_BRACKET + TAG_CLOSER;
+	private static final int NOT_FOUND = 0;
 
 	@Override
 	public void serialize(Value value, OutputStream stream) throws UnserializableException {
@@ -88,11 +90,12 @@ class SerializerXML implements Serializer {
 	private String writeListValue(List<Value> listValue, int indentation) {
 		StringBuilder retval = new StringBuilder();
 		listValue.forEach(value -> {
-			if (value.getType() == Type.NULL) {
-				retval.append(writeEmptyTag(ELEMENT));
-			}
 			retval.append(NEW_LINE);
 			retval.append(indent(indentation));
+			if (value.getType() == Type.NULL) {
+				retval.append(writeEmptyTag(ELEMENT));
+				return;
+			}
 			retval.append(writeOpeningTag(ELEMENT));
 			retval.append(writeValue(value, indentation));
 			if (value.getType() != Type.SCALAR) {
@@ -107,11 +110,12 @@ class SerializerXML implements Serializer {
 	private String writeMapValue(Map<String, Value> mapValue, int indentation) {
 		StringBuilder retval = new StringBuilder();
 		mapValue.forEach((tagName, value) -> {
-			if (value.getType() == Type.NULL) {
-				retval.append(writeEmptyTag(tagName));
-			}
 			retval.append(NEW_LINE);
 			retval.append(indent(indentation));
+			if (value.getType() == Type.NULL) {
+				retval.append(writeEmptyTag(tagName));
+				return;
+			}
 			retval.append(writeOpeningTag(tagName));
 			retval.append(writeValue(value, indentation));
 			if (value.getType() != Type.SCALAR) {
@@ -127,25 +131,33 @@ class SerializerXML implements Serializer {
 		return OPENING_BRACKET + tagName + TAG_CLOSER + CLOSING_BRACKET;
 	}
 
+	/////////////////////////////////////////////////////////////////////////////////////////////////
+
 	@Override
 	public Value deserialize(Class<?> clazz, InputStream stream) throws UnserializableException {
 		try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream));) {
 			StringBuilder buffer = getBuffer(reader);
-			return readObjectValue(buffer, clazz);
+			String className = getOpeningTag(buffer);
+			return readObjectValue(buffer, className, clazz);
 		} catch (IOException e) {
 			throw new UnserializableException("Object could not be deserialized", e);
 		}
 	}
 
-	private static Value readObjectValue(StringBuilder input, Class<?> clazz) throws UnserializableException {
+	private static Value readObjectValue(StringBuilder input, String className, Class<?> clazz)
+			throws UnserializableException {
 		Map<String, Value> retval = new HashMap<>();
-		String className = getOpeningTag(input);
 		do {
 			String tagName = getOpeningTag(input);
 			stripClosingBracket(input);
-			ResolvedType type = getResolvedType(tagName, clazz);
-			Value value = readValue(input, tagName, type);
-			retval.put(tagName, value);
+			if (isEmptyTag(tagName)) {
+				String tag = tagName.substring(0, tagName.length() - 1);
+				retval.put(tag, Value.createNull());
+			} else {
+				ResolvedType type = getResolvedType(tagName, clazz);
+				Value value = readValue(input, tagName, type);
+				retval.put(tagName, value);
+			}
 		} while (!isClosingTag(input, className));
 		delete(input, writeClosingTag(className));
 		return Value.createMap(retval);
@@ -153,11 +165,31 @@ class SerializerXML implements Serializer {
 
 	private static ResolvedType getResolvedType(String tagName, Class<?> clazz) throws UnserializableException {
 		try {
-			Field field = clazz.getDeclaredField(tagName);
+			Field field = getField(clazz, tagName);
 			return ResolvedType.create(field);
-		} catch (NoSuchFieldException | SecurityException e) {
+		} catch (SecurityException e) {
 			throw new UnserializableException("Object cannot be deserialized", e);
 		}
+	}
+
+	private static Field getField(Class<?> clazz, String tagName) throws UnserializableException {
+		Field[] fields = clazz.getDeclaredFields();
+		for (Field field : fields) {
+			String entryName = getEntryName(field);
+			if (tagName.equals(entryName)) {
+				field.setAccessible(true);
+				return field;
+			}
+		}
+		throw new UnserializableException("Field " + tagName + " could not be found");
+	}
+
+	private static String getEntryName(Field field) {
+		Entry entry = field.getDeclaredAnnotation(Entry.class);
+		if (entry != null) {
+			return entry.value();
+		}
+		return field.getName();
 	}
 
 	private static StringBuilder getBuffer(BufferedReader reader) throws IOException {
@@ -173,7 +205,7 @@ class SerializerXML implements Serializer {
 	private static Value readValue(StringBuilder input, String tagName, ResolvedType type)
 			throws UnserializableException {
 		XMLType xmlType = getXMLType(type.getType());
-		if (isEmptyTag(input)) {
+		if (isEmptyTag(tagName)) {
 			removeEmpty(input);
 			return Value.createNull();
 		}
@@ -186,7 +218,7 @@ class SerializerXML implements Serializer {
 			case MAP:
 				return readMapValue(input, tagName, type.getGenericTypes()[1]);
 			case OBJECT:
-				return readObjectValue(input, type.getType());
+				return readObjectValue(input, tagName, type.getType());
 			case SCALAR:
 				Value retval = readScalarValue(input);
 				delete(input, writeClosingTag(tagName));
@@ -201,13 +233,16 @@ class SerializerXML implements Serializer {
 		Map<String, Value> retval = new HashMap<>();
 		do {
 			String keyName = getOpeningTag(input);
-			if (isClosingTag(keyName, tagName)) {
-				stripClosingBracket(input);
-				return Value.createMap(Collections.emptyMap());
-			}
 			stripClosingBracket(input);
-			Value value = readValue(input, keyName, resolvedType);
-			retval.put(keyName, value);
+			if (isClosingTag(keyName, tagName)) {
+				return Value.createMap(Collections.emptyMap());
+			} else if (isEmptyTag(keyName)) {
+				String tag = keyName.substring(0, keyName.length() - 1);
+				retval.put(tag, Value.createNull());
+			} else {
+				Value value = readValue(input, keyName, resolvedType);
+				retval.put(keyName, value);
+			}
 		} while (!isClosingTag(input, tagName));
 		delete(input, writeClosingTag(tagName));
 		return Value.createMap(retval);
@@ -225,12 +260,15 @@ class SerializerXML implements Serializer {
 		List<Value> retval = new ArrayList<>();
 		do {
 			String elementName = getOpeningTag(input);
-			if (isClosingTag(elementName, tagName)) {
-				stripClosingBracket(input);
-				return Value.createList(Collections.emptyList());
-			}
 			stripClosingBracket(input);
-			retval.add(readValue(input, ELEMENT, resolvedType));
+			if (isClosingTag(elementName, tagName)) {
+				return Value.createList(Collections.emptyList());
+			} else if (isEmptyTag(elementName)) {
+				retval.add(Value.createNull());
+			} else {
+				Value value = readValue(input, elementName, resolvedType);
+				retval.add(value);
+			}
 		} while (!isClosingTag(input, tagName));
 		delete(input, writeClosingTag(tagName));
 		return Value.createList(retval);
@@ -262,11 +300,6 @@ class SerializerXML implements Serializer {
 	private static void delete(StringBuilder input, String string) {
 		int index = input.indexOf(string);
 		input.delete(0, index + string.length());
-	}
-
-	private static boolean isValueType(StringBuilder input, char valueType) {
-		char type = getFirstChar(input);
-		return type == valueType;
 	}
 
 	private static char getFirstChar(StringBuilder input) {
@@ -301,8 +334,8 @@ class SerializerXML implements Serializer {
 		return input.indexOf(String.valueOf(character));
 	}
 
-	private static boolean isEmptyTag(StringBuilder input) {
-		return isValueType(input, TAG_CLOSER);
+	private static boolean isEmptyTag(String input) {
+		return input.endsWith(String.valueOf(TAG_CLOSER));
 	}
 
 	private static XMLType getXMLType(Class<?> clazz) {
