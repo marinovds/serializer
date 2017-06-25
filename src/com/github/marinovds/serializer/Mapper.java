@@ -81,7 +81,8 @@ final class Mapper {
 		if (ignore != null) {
 			return false;
 		}
-		return !Modifier.isTransient(field.getModifiers());
+		int modifiers = field.getModifiers();
+		return !(Modifier.isTransient(modifiers) || Modifier.isStatic(modifiers));
 	}
 
 	private static String getEntryName(Field field) {
@@ -565,7 +566,6 @@ final class Mapper {
 			case MAP:
 			case SET:
 			default:
-				// Cannot happen because of checks
 				return false;
 		}
 	}

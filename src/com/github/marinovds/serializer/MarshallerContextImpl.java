@@ -94,8 +94,10 @@ final class MarshallerContextImpl implements MarshallerContext {
 		public DefaultContext() {
 		}
 
+		@Override
+		@SuppressWarnings("synthetic-access")
 		public Marshaller getMarshaller(String format) {
-			return DEFAULT_MARSHALLERS.get(format);
+			return getDefault(format);
 		}
 
 		@Override
